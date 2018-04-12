@@ -1,0 +1,20 @@
+The grammars in this directory give examples of various functionality of Thrax.
+
+Start with example.grm, which is also described in the online documentation at
+http://openfst.cs.nyu.edu/twiki/bin/view/GRM/ThraxQuickTour.
+
+assert.grm is a simple demonstration of the AssertEqual[] functionality.
+
+pdt.grm shows how to use the pushdown transducer interface to recognize the
+language a^n b^n.
+
+mpdt.grm gives various linguistic examples that demonstrate the multi-pushdown
+transducer functionality.
+
+paradigms_and_features.grm shows how to set up morphological paradigms and
+morphosyntactic features.
+
+replace.grm gives a simple example of how to use the Replace[] functionality.
+
+tokenizer.grm implements the Penn Treebank tokenizer rules (originally a sed
+script).

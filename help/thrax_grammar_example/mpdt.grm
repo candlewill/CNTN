@@ -1,0 +1,117 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Simple example of MPDT grammar, implementing various kinds of
+# reduplication. For example:
+#
+# thraxrewrite-tester --far=mpdt.far --rules=INFIXING_REDUPLICATION\$PARENS\$ASSIGNMENTS
+#
+# Input string: kidongo
+# Output string: kididongo
+#
+# Note that bytestringcopy provides functionality to hide the rather complex
+# MPDT operations from the grammar developer.
+
+import 'byte.grm' as bytelib;
+import 'bytestringcopy.grm' as bytestringcopy;
+
+export PARENS = bytestringcopy.PARENS;
+export ASSIGNMENTS = bytestringcopy.ASSIGNMENTS;
+reduplicator = bytestringcopy.REDUPLICATOR;
+
+## And now for something a bit more interesting, initial C*V reduplication a la
+##
+## Inkelas, Sharon and Zoll, Cheryl, 2005, Reduplication: Doubling in
+## Morphology. Cambridge University Press
+##
+## whereby reduplication is modeled as a full copy, followed by reduction on the
+## parts.
+
+sigma_star = (bytelib.kBytes | "[COPYEND]")*;
+
+mark_end = CDRewrite["" : "[COPYEND]", "", "[EOS]", sigma_star];
+
+del_marker = CDRewrite["[COPYEND]" : "", "", "", sigma_star];
+
+reduplicate =
+   MPdtCompose[mark_end, reduplicator, PARENS, ASSIGNMENTS, 'right_mpdt']
+;
+
+## Simple full-token reduplication
+
+export REDUPLICATOR = Optimize[
+  MPdtCompose[reduplicate, del_marker, PARENS, ASSIGNMENTS, 'left_mpdt']
+]
+;
+
+C =
+  "p" | "t" | "k" | "b" | "d" | "g"  | "f" | "s" | "h" | "m" | "n" | "l" | "r" |
+  "w" | "y"
+;
+
+V = "a" | "e" | "i" | "o" | "u";
+
+reduce_first =
+  CDRewrite[sigma_star : "", "[BOS]" C* V, "[COPYEND]", sigma_star]
+;
+
+copy2 =
+  MPdtCompose[reduplicate, reduce_first, PARENS, ASSIGNMENTS, 'left_mpdt']
+;
+
+export PARTIAL_REDUPLICATION =
+  Optimize[
+    MPdtCompose[copy2, del_marker, PARENS, ASSIGNMENTS, 'left_mpdt']
+  ]
+;
+
+## Yet another example involving infixing reduplication
+
+reduplicate1 =
+  MPdtCompose[mark_end, reduplicator, PARENS, ASSIGNMENTS, 'right_mpdt']
+;
+
+## C-VC-VC...
+
+initial_c_2nd_copy = CDRewrite[C* : "", "[COPYEND]", V, sigma_star];
+
+reduplicate2 =
+  MPdtCompose[reduplicate1, initial_c_2nd_copy, PARENS, ASSIGNMENTS, 'left_mpdt']
+;
+
+trailing_material_1st_copy =
+  CDRewrite[(V sigma_star "[COPYEND]") : "",  "[BOS]" C* V+ C+, "", sigma_star]
+;
+
+reduplicate3 =
+  MPdtCompose[reduplicate2, trailing_material_1st_copy, PARENS, ASSIGNMENTS, 'left_mpdt']
+;
+
+export INFIXING_REDUPLICATION =  Optimize[reduplicate3];
+
+# Finally an example that shows the inverse problem of matching a copy
+# and replacing the second copy with some special symbol. An example application
+# would be spelling Indonesian reduplicated plurals with a "2" replacing the
+# second copy as in
+#
+# orangorang -> orang2
+
+ww = bytestringcopy.WW;
+
+replacement = ("[COPYEND]" sigma_star) : "2";
+
+deduplication_rule = CDRewrite[replacement, "", "[EOS]", sigma_star];
+
+export DEDUPLICATOR =
+  Optimize[
+     MPdtCompose[ww, deduplication_rule, PARENS, ASSIGNMENTS, 'left_mpdt']]
+;

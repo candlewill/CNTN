@@ -1,0 +1,138 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Penn Treebank tokenizer grammar, based on the tokenizer function in
+# DetectorMorse (http://github.com/cslu-nlp/DetectorMorse), which is in turn a
+# gently-optimized version of the NLTK tokenizer (http://github.com/nltk/nltk),
+# which is based off of a sed script by Robert McIntyre
+# (http://cis.upenn.edu/~treebank/tokenizer.sed) used by the Penn Treebank
+# project.
+#
+# The tokenizer assumes that the input strings are single sentences with no
+# trailing whitespace; one is expected to have already performed sentence
+# segmentation.
+
+import 'byte.grm' as bytelib;
+
+digit = bytelib.kDigit;
+space = bytelib.kSpace;
+sigma = bytelib.kBytes;
+
+slash_b = "[BOS]" | (sigma - (bytelib.kAlnum | "_")) | "[EOS]";
+
+sigma_star = sigma*;
+ispace = "" : " ";
+
+func spaceify[A, sigma_star] {
+  # Given acceptor "A", generates a rewrite transducer which converts "A " to
+  # " A ".
+  return CDRewrite["" : " ", A, "", sigma_star] @
+         CDRewrite["" : " ", "", A, sigma_star];
+}
+
+func tokenize_two[A, B, sigma_star] {
+  # Given acceptors A and B, generates a rewrite transducer which converts "AB"
+  # to "A B ".
+  return CDRewrite["" : " ", A, B, sigma_star] @
+         CDRewrite["" : " ", A " " B, "", sigma_star];
+}
+
+### Block I: Most punctuation.
+# Converts initial " to ``.
+block1_rule01 = CDRewrite["\"": "``", "[BOS]", "", sigma_star];
+# Inserts a space before and after ``.
+block1_rule02 = spaceify["``", sigma_star];
+# Converts a " to `` (and adds space before and after) when preceded by space
+# or any of the left bracket characters.
+block1_rule03 = CDRewrite["\"" : " `` ", " " | "(" | "\[" | "{" | "<", "",
+                          sigma_star];
+# Separates : and , from all preceding material and any following non-digit
+# characters.
+block1_rule04_part1 = CDRewrite[ispace, "", ":" | ",", sigma_star];
+block1_rule04_part2 = CDRewrite[ispace, ":" | ",", sigma - digit,
+                                sigma_star];
+# Inserts space before and after ellipsis.
+block1_rule05 = spaceify["...", sigma_star];
+# Inserts space before and after various specials.
+block1_rule06 = spaceify["," | ";" | "@" | "#" | "$" | "%" | "&", sigma_star];
+# Inserts space before and after . (not preceded by another .) and a
+# final right bracket or quote.
+block1_rule07 = CDRewrite[ispace, sigma - ".",
+    "." ("\]" | ")" | "}" | ">" | "\"" | "'")* space* "[EOS]", sigma_star] @
+    CDRewrite["" : " ", "." ("\]" | ")" | "}" | ">" | "'")*, "[EOS]",
+              sigma_star];
+
+# Inserts space before ? and !
+block1_rule08 = CDRewrite[ispace, "", "?" | "!", sigma_star];
+# Inserts space before and after ' not preceded by another '.
+block1_rule09 = CDRewrite[ispace, sigma - "'", "' ", sigma_star];
+# Inserts space before and after bracket symbols.
+block1_rule10 = spaceify["\[" | "\]" | "(" | ")" | "{" | "}" | "<" | ">",
+                         sigma_star];
+## Inserts space before and after dash.
+block1_rule11 = spaceify["--", sigma_star];
+block1 = Optimize[block1_rule01 @ block1_rule02 @ block1_rule03 @
+                  block1_rule04_part1 @ block1_rule04_part2 @ block1_rule05 @
+                  block1_rule05 @ block1_rule06 @ block1_rule07 @
+                  block1_rule08 @ block1_rule09 @ block1_rule10];
+
+### Block II: Final quotes.
+block2_rule1 = CDRewrite["\"" : " '' ", "", "", sigma_star];
+block2_rule2 = tokenize_two[space, "''", sigma_star];
+block2 = Optimize[block2_rule1 @ block2_rule2];
+
+### Block III: Contractions.
+left_contraction = sigma - ("'" | " ");
+block3_rule01 = tokenize_two[left_contraction,
+    ("'S" | "'s" | "'M" | "'m" | "'D" | "'d" | "'") slash_b, sigma_star];
+block3_rule02 = tokenize_two[left_contraction,
+    ("'LL" | "'ll" | "'RE" | "'re" | "'VE" | "'ve" | "N'T" | "n't") slash_b,
+    sigma_star];
+block3_rule03 = tokenize_two[slash_b ("CAN" | "Can" | "can"),
+                             ("NOT" | "not") slash_b, sigma_star];
+block3_rule04 = tokenize_two[slash_b ("D" | "d"),
+                             ("'YE" | "'ye") slash_b, sigma_star];
+block3_rule05 = tokenize_two[slash_b ("GIM" | "Gim" | "gim"),
+                             ("ME" | "me") slash_b, sigma_star];
+block3_rule06 = tokenize_two[slash_b ("GON" | "Gon" | "gon"),
+                             ("NA" | "na") slash_b, sigma_star];
+block3_rule07 = tokenize_two[slash_b ("GOT" | "Got" | "got"),
+                             ("TA" | "ta") slash_b, sigma_star];
+block3_rule08 = tokenize_two[slash_b ("LEM" | "Lem" | "lem"),
+                             ("ME" | "me") slash_b, sigma_star];
+block3_rule09 = tokenize_two[slash_b ("MOR" | "Mor" | "mor"),
+                             ("'N" | "'n") slash_b, sigma_star];
+block3_rule10 = tokenize_two[slash_b ("WAN" | "Wan" | "wan"),
+                             ("NA" | "na") slash_b, sigma_star];
+block3_rule11 = tokenize_two[slash_b ("'T" | " 't"),
+                             ("IS" | "is") slash_b, sigma_star];
+block3_rule12 = tokenize_two[slash_b ("'T" | " 't"),
+                             ("WAS" | "was") slash_b, sigma_star];
+block3 = Optimize[block3_rule01 @ block3_rule02 @ block3_rule03 @
+                  block3_rule04 @ block3_rule05 @ block3_rule06 @
+                  block3_rule07 @ block3_rule08 @ block3_rule09 @
+                  block3_rule10 @ block3_rule11 @ block3_rule12];
+
+# Initial and final spaces are inserted between block 2 and 3, and all
+# repeated spaces are removed finally.
+boundary_space = CDRewrite[ispace, "[BOS]", "", sigma_star] @
+                 CDRewrite[ispace, "", "[EOS]", sigma_star];
+cleanup_space = Optimize[CDRewrite[" "+ : "", "[BOS]", "", sigma_star] @
+                         CDRewrite[" "+ : "", "", "[EOS]", sigma_star] @
+                         # Merges 2-4 or more spaces to 1.
+                         CDRewrite[" "{4} : " ", "", "", sigma_star] @
+                         CDRewrite[" "{3} : " ", "", "", sigma_star] @
+                         CDRewrite[" "{2} : " ", "", "", sigma_star]];
+
+# Putting it all together.
+export TOKENIZER = Optimize[block1 @ block2 @ boundary_space @ block3 @
+                            cleanup_space];

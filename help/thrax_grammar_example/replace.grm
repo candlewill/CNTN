@@ -1,0 +1,53 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# To test this grammar one can use thraxrewrite-tester, e.g., as follows:
+#
+# $ thraxrewrite-tester --far=replace.far --rules=MEASURE
+# Input: 234 kg
+
+import 'byte.grm' as b;
+import 'numbers.grm' as n;
+
+replacement_sequence = "[ROOT][NUMBER][MEASURE]";
+
+singular_measures =
+   ("ft" : "foot")
+ | ("in" : "inch")
+ | ("cm" : "centimeter")
+ | ("m" : "meter")
+ | ("kg" : "kilogram")
+;
+
+plural_measures =
+   ("ft" : "feet")
+ | ("in" : "inches")
+ | ("cm" : "centimeters")
+ | ("m" : "meters")
+ | ("kg" : "kilograms")
+;
+
+export MEASURE = Optimize[
+  Replace[replacement_sequence,
+	  # This corresponds to "[ROOT]" in the replacement sequence. Think of
+	  # it as the skeleton onto which the flesh will be attached.
+	  "[NUMBER] [MEASURE]",
+	  # This is a definition of singular numbers: it is the flesh associated
+	  # with [NUMBER].
+	  "1" @ n.NUMBERS,
+	  # This is the flesh associated with [MEASURE].
+	  singular_measures]
+| Replace[replacement_sequence,
+	  "[NUMBER] [MEASURE]",
+	  (b.kDigit* - "1") @ n.NUMBERS,
+	  plural_measures]]
+;

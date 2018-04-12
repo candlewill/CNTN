@@ -1,0 +1,7 @@
+# Created by .ignore support plugin (hsz.mobi)
+*.far
+Makefile
+*.zip
+*.tar.gz
+*.tar
+.idea

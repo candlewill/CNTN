@@ -1,0 +1,102 @@
+#!/usr/bin/env python
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Helper function to create a Makefile with the correct dependencies for
+# compiling a suite of grammars.
+#
+# Usage: thraxmakedep top-level-grammar [makefile-target=Makefile]
+#
+# It is the user's responsibility to make sure that the top-level grammar and
+# whatever grammars are recursively referenced by 'import', LoadFst[],
+# LoadFstFromFar[], SymbolTable[] and StringFile[] statements are all readable,
+# and that the directories in which they occur are all writable.
+
+import getopt
+import re
+import sys
+
+COMPILER_ = 'thraxcompiler %s%s--input_grammar=$< --output_far=$@'
+FARS_ = []
+GRAMMARS_ = []
+INTERPRETED_FILES_ = \
+    re.compile("(LoadFstFromFar|LoadFst|StringFile|SymbolTable)\['([^ ']*)'")
+SAVE_SYMBOLS_ = ''
+ARC_TYPE_ = ''
+
+
+def ReplaceExt(grammar):
+  ## Be careful about replacement in case someone has .grm elsewhere in the path.
+  if grammar.endswith('.grm'): return grammar[:-4] + '.far'
+  return grammar
+
+
+def MakeDepend(grammar, makep):
+  if grammar in GRAMMARS_: return
+  p = open(grammar)
+  grammars = []
+  interpreted_files = []
+  for line in p:
+    tokens = line.split()
+    if len(tokens) > 1 and tokens[0] == 'import':
+      nextgrammar = tokens[1].replace("'", '')
+      grammars.append(nextgrammar)
+    else:
+      match = INTERPRETED_FILES_.search(line)
+      if match:
+        interpreted_file = match.group(2)
+        interpreted_files.append(interpreted_file)
+  fars = map(ReplaceExt, grammars)
+  far = ReplaceExt(grammar)
+  dependents = ' '.join(fars + interpreted_files)
+  makep.write('%s: %s %s\n' % (far, grammar, dependents))
+  makep.write('\t%s\n\n' % (COMPILER_ % (SAVE_SYMBOLS_, ARC_TYPE_)))
+  for far in fars:
+    if far not in FARS_:
+      FARS_.append(far)
+  for g in grammars:
+    MakeDepend(g, makep)
+  GRAMMARS_.append(grammar)
+  p.close()
+
+
+def MakeFile(grammar, makefile='Makefile'):
+  p = open(makefile, 'w')
+  MakeDepend(grammar, p)
+  p.write('clean:\n')
+  p.write('\trm -f %s\n' % ' '.join(FARS_))
+  p.close()
+
+
+if __name__ == '__main__':
+  usage = ('Usage: %s [-s/--save_symbols]' +
+           ' [-a/--arc_type (default: standard)]' +
+           ' top-level-grammar' +
+           ' [makefile-target=Makefile]\n') % sys.argv[0]
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], "sa:", ["save_symbols", "arc_type="])
+  except getopt.GetoptError:
+    sys.stderr.write(usage)
+    sys.exit(1)
+  for opt, arg in opts:
+    if opt in ("-s", "--save_symbols"):
+      SAVE_SYMBOLS_ = '--save_symbols '
+    elif opt in ("-a", "--arc_type"):
+      ARC_TYPE_ = '--arc_type=%s ' % arg
+  if len(args) < 1 or len(args) > 2:
+    sys.stderr.write(usage)
+    sys.exit(1)
+  if len(args) == 1:
+    MakeFile(args[0])
+  else:
+    MakeFile(args[0], args[1])

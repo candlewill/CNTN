@@ -1,0 +1,223 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import 'byte.grm' as bytelib;
+import 'numbers.grm' as numbers;
+
+# Import grammars from byte.grm and numbers.grm into their own named namespaces
+# ("as <namespace>"). The way this is written it is assumed that byte.grm and
+# numbers.grm exist in the directory in which this file exists, and that you are
+# building in this directory.
+#
+# To compile this grammar, the easiest way is to run
+#
+# thraxmakedep example.grm
+#
+# And then run "make". "thraxmakedepend" is a python script that reads in a
+# top-level grammar, figures out the dependencies, and writes out a makefile (by
+# default named "Makefile") that contains the relevant targets and build
+# commands, consisting of calls to "thraxcompiler". For this grammar, the
+# Makefile should look as follows:
+#
+# example.far: example.grm byte.far numbers.far
+#	thraxcompiler --input_grammar=$< --output_far=$@
+#
+# byte.far: byte.grm
+#	thraxcompiler --input_grammar=$< --output_far=$@
+#
+# numbers.far: numbers.grm byte.far
+#       thraxcompiler --input_grammar=$< --output_far=$@
+#
+# clean:
+#       rm -f byte.far numbers.far
+#
+# As indicated, the final target is the FST archive example.far, which will
+# contain a single fst named TOKENIZER.fst (see below). After compiling the
+# whole suite of grammars, it is safe to run "make clean", which will remove all
+# but the top-level FST archive. (Of course if you do that and need the other
+# archives later on you will have to rebuild them.)
+#
+# If one wishes to build the grammar in a different directory from the one where
+# one or more of the grammars reside, then one must specify pathnames that are
+# either relative to the build directory, or else full pathnames. For example:
+#
+# import '../byte.grm' as bytelib;
+#
+# In any case, one must have read and write permissions to the directories since
+# thraxcompiler will by default build fars in the same directory as the grammar.
+#
+# [TODO(rws): Add comment on specifying different directory for output of far.]
+#
+# To test this grammar one can use thraxrewrite-tester as follows:
+#
+# $ thraxrewrite-tester --far=example.far --rules=TOKENIZER
+# Input string: Well, I can't eat muffins in an agitated manner.
+# Output string: Well , I ca n't eat muffins in an agitated manner .
+# Input string: Mr. Ernest Worthing, B. 4, The Albany.
+# Output string: Mr. Ernest Worthing , B. four , The Albany .
+# Input string: Lieutenant 1840,
+# Output string: Lieutenant eighteen forty ,
+# Input string: Uncle Jack!
+# Output string: Uncle Ernest !
+
+# Simple example of a mapping between strings: this transducer does nothing
+# except insert a space:
+
+insspace = "" : " ";
+
+# Use the transducer defined by kSpace in byte.grm to map a sequence of one or
+# more spaces to exactly one space:
+
+reduce_spaces = bytelib.kSpace+ : " ";
+
+# This deletes a sequence of zero or more spaces:
+
+delspace = bytelib.kSpace* : "";
+
+# For context-dependent rewrite rules, one must specify the alphabet over which
+# the rule is to apply. This should be specified as the transitive closure of
+# all characters that one might expect to see in the input.  The simplest way to
+# do this in general is to allow it to consist of any sequence of bytes as
+# below. This is not necessarily the most efficient way to specify it. If you
+# know that your input will be much more restricted, then you can specify a
+# smaller alphabet, which in turn will yield gains in compilation efficiency:
+
+sigma_star = bytelib.kBytes*;
+
+# This rule illustrates the difference operator. One can specify the difference
+# between any pair of regular expressions that specify *acceptors*. In this case
+# we specify any punctuation symbol that is not a period:
+
+punct_not_period = bytelib.kPunct - ".";
+
+# Here are some examples of context-dependent-rewrite rules. The basic format
+# for a context-dependent rewrite rule is:
+#
+# CDRewrite[change, left_context, right_context, sigma_star]
+#
+# where change is a transducer that specifies a mapping between input and
+# output.
+#
+# In phonological rewrite rule notation this would be:
+#
+# input -> output / left_context _ right_context
+#
+# where "change" is a transducer, left_context and right_context acceptors, and
+# sigma_star as described above.  This specifies a left-to-right obligatory
+# rewrite rule. See the documentation for other options.
+#
+# In the first rule below the change is to insert a space, the left context
+# anything at all (hence null) and the right context the acceptor specified
+# above as punct_not_period:
+
+separate_punct1 = CDRewrite["" : " ", "", punct_not_period, sigma_star];
+
+# Similar to the above, except that we insert a space after the punctuation
+# symbol:
+
+separate_punct2 = CDRewrite["" : " ", punct_not_period, "", sigma_star];
+
+# The following illustrates composition: we construct the rule separate_punct by
+# composing separate_punct1 with separate_punct2:
+
+separate_punct = separate_punct1 @ separate_punct2;
+
+# This rule illustrates the use of the string delimiter tag "[EOS]". Assuming
+# that any sentence internal period marks something like an abbreviation or
+# maybe a decimal number, we only want to split off final periods. These may be
+# followed by spaces or other puncutation symbols. So the following rule states
+# that we insert a space when followed by a period that is itself followed by an
+# optional string of spaces or punctuation symbols, followed by the end of the
+# string. For the left context, one may specify the beginning of the string as
+# "[BOS]".
+
+separate_final_period = CDRewrite["" : " ",
+                                  "",
+                                  "."
+                                  (bytelib.kPunct | bytelib.kSpace)* "[EOS]",
+                                  sigma_star]
+;
+
+# The following rule composes two transducers, and optimizes the
+# result. Optimize performs various optimizations on the transducer: removing
+# epsilon arcs, summing arc weights, determinizing and minimizing. The resulting
+# transducers is in general more compact and efficient. Especially in large
+# grammars, it is a good idea to optimize at least some of the intermediate
+# transducers. This can significantly speed up compilation.
+
+first_phase = Optimize[separate_punct @ separate_final_period];
+
+# This illustrates the use of the StringFile functionality. A stringfile is
+# simply a list of literal strings:
+#
+# string1
+# string2
+# string3
+# ...
+#
+# It is equivalent to the following disjunction:
+#
+# string1 | string2 | string3 | ...
+#
+# but for very large lists it is much more efficient.
+
+ernest_equivalents = StringFile['ernest.txt'];
+
+ernest = ernest_equivalents : "Ernest";
+
+anyword = bytelib.kNotSpace+;
+number = numbers.NUMBERS;
+
+# We define a "word" as either "anyword", as above or a number, handled by the
+# number grammar in numbers.grm, or the (silly) ernest rule. This rule
+# illustrates the use of weights. We want to favor a number if it matches the
+# input. That is we want "123" to map to "one hundred twenty three", not to
+# "123". We can implement this using weights by disfavoring the "anyword"
+# analysis. For any non-space sequence, the analyzer will allow both analyses,
+# but the "anyword" analysis will always be disfavored. So when the TOKENIZER
+# rule (below) is composed with a string, the best (shortest path) analysis will
+# be the one with the number analysis, if that's available.  Weights are
+# interpreted according to the tropical (+, min) semiring (see
+# http://www.openfst.org under "FST Weights"), so a weight of <1.0> as below
+# will disfavor "anyword", which has an implicit weight of 0. Negative weights
+# are also allowed, so this could have been written:
+#
+# word = anyword | (number <-1.0>) | ernest;
+#
+# Note that the grouping parentheses are *required* in this instance:
+
+word = (anyword <1.5>) | number | ernest;
+
+# A sentence consists of a sequence of words interspersed with spaces. Initial
+# and final spaces get deleted, and interword spaces get reduced to exactly one
+# space:
+
+second_phase = delspace
+               word
+               (reduce_spaces word)*
+               delspace
+;
+
+# Some sequences involving apostrophes are overzealously tokenized. These rules
+# fix that and produces more reasonable tokenizations. Note that the grouping
+# parentheses are required when one is construction a disjunction of
+# transductions:
+
+regroupings = ("n ' t" : " n't") | (" ' s" : " 's") ;
+
+final_phase = CDRewrite[regroupings, "", (bytelib.kSpace | "[EOS]"),
+                        sigma_star];
+
+# The whole tokenizer is the composition of the three phases. We export this
+# rule since we want it available in the final FST archive:
+
+export TOKENIZER = Optimize[first_phase @ second_phase @ final_phase];

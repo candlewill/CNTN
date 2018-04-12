@@ -1,0 +1,152 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Simple toy grammar of Latin nominal case inflection, using the support for
+# paradigms and features.
+#
+# The following rules given the corresponding input, should give the indicated
+# output (or for the tagger examples you could use ALL_TAGGER):
+#
+# DECL1_ANALYZER	aqua	aqu+a[cas=nom][num=sg]
+# DECL1_ANALYZER	aquārum	aqu+ārum[cas=gen][num=pl]
+# DECL2_ANALYZER	dominus	domin+us[cas=nom][num=sg]
+# DECL2_ANALYZER	dominōrum	domin+ōrum[cas=gen][num=pl]
+# DECL2R_ANALYZER	vir	vir+[cas=nom][num=sg]
+# DECL2R_ANALYZER	virōrum	vir+ōrum[cas=gen][num=pl]
+# DECL1_TAGGER	aqua	aqua[cas=nom][num=sg]
+# DECL1_TAGGER	aquārum	aquārum[cas=gen][num=pl]
+# DECL2_TAGGER	dominus	dominus[cas=nom][num=sg]
+# DECL2_TAGGER	dominōrum	dominōrum[cas=gen][num=pl]
+# DECL2R_TAGGER	vir	vir[cas=nom][num=sg]
+# DECL2R_TAGGER	virōrum	virōrum[cas=gen][num=pl]
+
+import 'byte.grm' as bytelib;
+
+case = Feature['cas', 'nom', 'acc', 'gen', 'dat', 'abl'];
+number = Feature['num', 'sg', 'pl'];
+noun = Category[case, number];
+
+byt_star = (bytelib.kBytes - "+")*;  ## Don't include morph boundary in this!!
+
+decl1_nom_sg = byt_star "+a" FeatureVector[noun, 'cas=nom', 'num=sg'];
+decl1_gen_sg = byt_star "+ae" FeatureVector[noun, 'cas=gen', 'num=sg'];
+decl1_dat_sg = byt_star "+ae" FeatureVector[noun, 'cas=dat', 'num=sg'];
+decl1_acc_sg = byt_star "+am" FeatureVector[noun, 'cas=acc', 'num=sg'];
+decl1_abl_sg = byt_star "+ā" FeatureVector[noun, 'cas=abl', 'num=sg'];
+
+decl1_nom_pl = byt_star "+ae" FeatureVector[noun, 'cas=nom', 'num=pl'];
+decl1_gen_pl = byt_star "+ārum" FeatureVector[noun, 'cas=gen', 'num=pl'];
+decl1_dat_pl = byt_star "+īs" FeatureVector[noun, 'cas=dat', 'num=pl'];
+decl1_acc_pl = byt_star "+ās" FeatureVector[noun, 'cas=acc', 'num=pl'];
+decl1_abl_pl = byt_star "+īs" FeatureVector[noun, 'cas=abl', 'num=pl'];
+
+mapper =
+    ("[cas=nom]" : "\[cas=nom\]")
+  | ("[cas=acc]" : "\[cas=acc\]")
+  | ("[cas=gen]" : "\[cas=gen\]")
+  | ("[cas=dat]" : "\[cas=dat\]")
+  | ("[cas=abl]" : "\[cas=abl\]")
+  | ("[num=sg]" : "\[num=sg\]")
+  | ("[num=pl]" : "\[num=pl\]")
+;
+
+features = Project[mapper, 'input'];
+
+sigma_star = (bytelib.kBytes | features)*;
+
+decl1 =
+    decl1_nom_sg
+  | decl1_gen_sg
+  | decl1_dat_sg
+  | decl1_acc_sg
+  | decl1_abl_sg
+  | decl1_nom_pl
+  | decl1_gen_pl
+  | decl1_dat_pl
+  | decl1_acc_pl
+  | decl1_abl_pl
+;
+
+decl2_nom_sg = byt_star "+us" FeatureVector[noun, 'cas=nom', 'num=sg'];
+decl2_gen_sg = byt_star "+ī" FeatureVector[noun, 'cas=gen', 'num=sg'];
+decl2_dat_sg = byt_star "+ō" FeatureVector[noun, 'cas=dat', 'num=sg'];
+decl2_acc_sg = byt_star "+um" FeatureVector[noun, 'cas=acc', 'num=sg'];
+decl2_abl_sg = byt_star "+ō" FeatureVector[noun, 'cas=abl', 'num=sg'];
+
+decl2_nom_pl = byt_star "+ī" FeatureVector[noun, 'cas=nom', 'num=pl'];
+decl2_gen_pl = byt_star "+ōrum" FeatureVector[noun, 'cas=gen', 'num=pl'];
+decl2_dat_pl = byt_star "+īs" FeatureVector[noun, 'cas=dat', 'num=pl'];
+decl2_acc_pl = byt_star "+ōs" FeatureVector[noun, 'cas=acc', 'num=pl'];
+decl2_abl_pl = byt_star "+īs" FeatureVector[noun, 'cas=abl', 'num=pl'];
+
+decl2 =
+    decl2_nom_sg
+  | decl2_gen_sg
+  | decl2_dat_sg
+  | decl2_acc_sg
+  | decl2_abl_sg
+  | decl2_nom_pl
+  | decl2_gen_pl
+  | decl2_dat_pl
+  | decl2_acc_pl
+  | decl2_abl_pl
+;
+
+stemmer = CDRewrite[("+" sigma_star) : "", "", "[EOS]", sigma_star];
+deleter =  CDRewrite[("+" | features) : "", "", "", sigma_star];
+
+decl2r_nom_sg = byt_star "+" FeatureVector[noun, 'cas=nom', 'num=sg'];
+
+decl2r = ParadigmReplace[decl2, decl2_nom_sg, decl2r_nom_sg];
+
+decl1_stems = "aqu" | "mens" | "naut" ;
+
+decl2_stems = "domin" | "fīli";
+
+decl2r_stems = "vir" | "puer";
+
+decl1_analyzer = Analyzer[decl1, decl1_stems, stemmer, deleter];
+
+decl2_analyzer = Analyzer[decl2, decl2_stems, stemmer, deleter];
+
+decl2r_analyzer = Analyzer[decl2r, decl2r_stems, stemmer, deleter];
+
+map = CDRewrite[mapper, "", "", sigma_star];
+
+export DECL1_ANALYZER = Optimize[decl1_analyzer @ map];
+
+export DECL2_ANALYZER = Optimize[decl2_analyzer @ map];
+
+export DECL2R_ANALYZER = Optimize[decl2r_analyzer @ map];
+
+bdeleter = CDRewrite["+" : "", "", "", sigma_star];
+
+decl1_tagger = Tagger[decl1, decl1_stems, stemmer, deleter, bdeleter];
+
+decl2_tagger = Tagger[decl2, decl2_stems, stemmer, deleter, bdeleter];
+
+decl2r_tagger = Tagger[decl2r, decl2r_stems, stemmer, deleter, bdeleter];
+
+export DECL1_TAGGER = Optimize[decl1_tagger @ map];
+
+export DECL2_TAGGER = Optimize[decl2_tagger @ map];
+
+export DECL2R_TAGGER = Optimize[decl2r_tagger @ map];
+
+export ALL_TAGGER= Optimize[
+   DECL1_TAGGER
+ | DECL1_TAGGER
+ | DECL2_TAGGER
+ | DECL2_TAGGER
+ | DECL2R_TAGGER
+ | DECL2R_TAGGER]
+;
